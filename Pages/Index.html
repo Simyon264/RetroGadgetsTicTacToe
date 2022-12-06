@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>TTT - Test site</title>
+        <base href="/" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    </head>
+    <style>
+        * {
+            font-family: Arial, Helvetica, sans-serif;
+        }
+    </style>
+    <body>
+        <h1>This site is for testing only!</h1>
+        <p>It is not intended for public use.<br>If you have found this site by accident, please leave immediately.<br>Thank you.</p>
+        <div>
+            <h2>
+                Connection details
+            </h2>
+            <p>
+                <b>UUID:</b> <span id="uuid"></span><br>
+                <b>Username:</b> <span id="name"></span><br>
+                <input type="text" id="nameInput" placeholder="Name">
+                <button onclick="setUsername()">Set username</button>
+            </p>
+        </div>
+        <div>
+            <h2>Join lobby</h2>
+            <p>
+                <input type="text" id="lobbyName" placeholder="Lobby name" />
+                <button onclick="joinLobby()">Join</button>
+                <button onclick="createLobby()">Create</button>
+            </p>
+        </div>
+        <div>
+            <h2>
+                Lobby List
+            </h2>
+            <div id="lobbyList">
+
+            </div>
+        </div>
+        <div>
+            <h2>
+                Current Lobby
+            </h2>
+            <div id="lobby">
+                <p>
+                    <b>Lobby UUID:</b> <span id="lobbyName"></span><br>
+                    <b>Turn:</b> <span id="lobbyTurn"></span><br>
+                    <b>Winner</b> <span id="lobbyWinner"></span><br>
+                    <b>Board:</b> <span id="lobbyBoard"></span><br>
+                </p>
+                <p>
+                    <button onclick="setSpace()">Set Space</button>
+                    <input type="number" id="lobbySpace" placeholder="Space" />
+                </p>
+                <p>
+                    <button onclick="leaveLobby()">Leave</button>
+                    <button onclick="rematch()">Rematch</button>
+                </p>
+            </div>
+        </div>
+    </body>
+    <script>
+        var player = {
+            uuid: "00000000-0000-0000-0000-000000000000",
+            name: "TestPlayer"
+        };
+        var isConnecting = false
+        var isConnected = false
+        var ip = "45.81.235.192"
+        var port = 3000
+        var url = "http://" + ip + ":" + port
+        var version = "1.0.0"
+        var lobbyList = new Map()
+        var joinedlobbyId = ""
+        var currentLobby = {
+            lobbyId: "",
+            board: [],
+            turn: ""
+        }
+        var stopRefresh = false
+        var isHost = false
+
+        function leaveLobby() {
+            currentLobbyId = ""
+            currentLobby = {
+                lobbyId: "",
+                board: [],
+                turn: ""
+            }
+            stopRefresh = true
+        }
+
+        function rematch() {
+            if (joinedlobbyId == "") return;
+            fetch(url + "/rematch/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    clientId: player.uuid,
+                    GameVersion: version,
+                    lobbyId: joinedlobbyId
+                })
+            }).then(res => {
+                if (res.status == 200) {
+                    console.log("Rematch request sent")
+                } else {
+                    console.log("Rematch request failed")
+                }
+            })
+        }
+
+        function setUsername() {
+            player.name = document.getElementById("nameInput").value
+            fetch(url + "/client", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    clientId: player.uuid,
+                    GameVersion: version,
+                    newName: player.name
+                })
+            }).then((res) => {
+                if (res.status == 200) {
+                    console.log("Set player name!")
+                } else {
+                    console.log("Failed to set player name")
+                }
+            })
+        }
+
+        function connect() {
+            console.log("Connecting...");
+            isConnecting = true
+            // Connect using fetch
+            fetch(url + "/connect", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    GameVersion: version,
+                })
+            }).catch((err) => {
+                isConnecting = false
+            }).then((res) => {
+                if (res.status == 200) {
+                    res.json().then((data) => {
+                        console.log(data)
+                        player.uuid = data.uuid
+                        isConnecting = false
+                        isConnected = true
+                        // Set player name in API
+                        fetch(url + "/client", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify({
+                                clientId: player.uuid,
+                                GameVersion: version,
+                                newName: player.name
+                            })
+                        }).then((res) => {
+                            if (res.status == 200) {
+                                console.log("Set player name!")
+                                console.log("Connected!")
+                            } else {
+                                console.log("Failed to set player name")
+                            }
+                        })
+                    })
+                } else {
+                    isConnecting = false
+                }
+            })
+        }
+
+        function createLobby() {
+            stopRefresh = false
+            fetch(url + "/lobby", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    clientId: player.uuid,
+                    GameVersion: version,
+                })
+            }).then((res) => {
+                if (res.status == 200) {
+                    res.json().then((data) => {
+                        joinedlobbyId = data.lobbyId
+                        isHost = true
+                    })
+                    console.log("Created lobby!")
+                } else {
+                    console.log("Failed to create lobby")
+                }
+            })
+        }
+
+        function setSpace() {
+            var space = document.getElementById("lobbySpace").value
+            fetch(url + "/space", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    clientId: player.uuid,
+                    GameVersion: version,
+                    lobbyId: currentLobby.lobbyId,
+                    space: space,
+                })
+            }).then((res) => {
+                if (res.status == 200) {
+                    console.log("Set space!")
+                } else {
+                    console.log("Failed to set space")
+                }
+            })
+        }
+
+        // Join lobby function
+        function joinLobby() {
+            stopRefresh = false
+            isHost = false
+            if (!isConnected) {
+                return;
+            }
+            var lobbyName = document.getElementById("lobbyName").value
+            if (lobbyName == "") {
+                return;
+            }
+            var lobbyId = lobbyList.get(lobbyName);
+            if (lobbyId == undefined) {
+                return;
+            }
+
+            console.log("Joining lobby: " + lobbyName)
+            fetch(url + "/lobby/join", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    clientId: player.uuid,
+                    GameVersion: version,
+                    lobbyId: lobbyId
+                })
+            }).then((res) => {
+                if (res.status == 200) {
+                    res.json().then((data) => {
+                        joinedlobbyId = data.lobbyId
+                    })
+                    console.log("Joined lobby!")
+                } else {
+                    console.log("Failed to join lobby")
+                    joinedlobbyId = ""
+                }
+            })
+        }
+
+        var lastLobbyHeartbeat = 0
+        function lobbyHeatbeat() {
+            if (stopRefresh) {
+                return;
+            }
+            if (lastLobbyHeartbeat == 0) {
+            if (joinedlobbyId == "") {
+                return;
+            }
+            fetch(url + "/lobbyheartbeat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    clientId: player.uuid,
+                    GameVersion: version,
+                    lobbyId: joinedlobbyId
+                })
+            }).then((res) => {
+                if (res.status == 200) {
+                    res.json().then((data) => {
+                        currentLobby.lobbyId = data.lobbyId
+                        currentLobby.board = data.board
+                        currentLobby.turn = data.turn
+                        currentLobby.winner = data.winner
+                    })
+                    console.log("Got lobby heartbeat!")
+                } else {
+                    console.log("Failed to get lobby heartbeat")
+                }
+                lastLobbyHeartbeat = 60
+            })
+            } else {
+                lastLobbyHeartbeat -= 1
+            }
+        }
+
+        // Tick function that runs 60 times per second
+        function tick() {
+            // Update the connection details
+            document.getElementById("uuid").innerHTML = player.uuid;
+            document.getElementById("name").innerHTML = player.name;
+            if (!isConnecting && !isConnected) {
+                connect();
+                console.log("NOT CONNECTED!")
+                return;
+            }
+            heartbeat();
+            getLobbies();
+            if (joinedlobbyId != "") {
+                lobbyHeatbeat()
+                //getLobby();
+                // Update the lobby details
+                document.getElementById("lobbyName").innerHTML = currentLobby.lobbyId;
+                document.getElementById("lobbyTurn").innerHTML = currentLobby.turn;
+                document.getElementById("lobbyBoard").innerHTML = JSON.stringify(currentLobby.board);
+                document.getElementById("lobbyWinner").innerHTML = currentLobby.winner;
+            } else {
+                document.getElementById("lobbyName").innerHTML = "";
+                document.getElementById("lobbyTurn").innerHTML = "";
+                document.getElementById("lobbyBoard").innerHTML = "";
+                document.getElementById("lobbyWinner").innerHTML = "";
+            }
+        }
+
+        var lastLobbyGetRequest = 0
+        function getLobby() {
+            if (lastLobbyGetRequest > 60) {
+                lastLobbyGetRequest = 0
+                fetch(url + "/lobby/get", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        clientId: player.uuid,
+                        GameVersion: version,
+                        lobbyId: joinedlobbyId
+                    })
+                }).then((res) => {
+                    if (res.status == 200) {
+                        res.json().then((data) => {
+                            currentLobby = {
+                                lobbyId: data.lobbyId,
+                                board: data.board,
+                                turn: data.turn,
+                                winner: data.winner
+                            }
+                        })
+                    } else {
+                        console.log("Failed to get lobby")
+                        joinedlobbyId = ""
+                        currentLobby = {
+                            board: [],
+                            turn: "",
+                            lobbyId: ""
+                        }
+                    }
+                })
+            } else {
+                lastLobbyGetRequest++
+            }
+        }
+
+        var lastLobbyRequest = 0
+        function getLobbies() {
+            if (lastLobbyRequest > 120) {
+                lobbyList.clear()
+                fetch(url + "/lobbies", {
+                    method: "GET",
+                }).then((res) => {
+                    if (res.status == 200) {
+                        res.json().then((data) => {
+                            var lobbies = ""
+                            data.lobbies.forEach(element => {
+                                lobbyList.set(element.name, element.uuid)
+                                lobbies += `<p><b>Lobby Name: ${element.name}</b> <br><b>Lobby UUID: ${element.uuid}</b> <br><b>PlayerX: </b> ${JSON.stringify(element.playerX)}<br><b>PlayerO: </b>${JSON.stringify(element.playerO)}<br></p><br>`
+                            });
+                            document.getElementById("lobbyList").innerHTML = lobbies
+                        });
+                    } else {
+                        console.log("Failed to fetch lobbies")
+                    }
+                });
+                lastLobbyRequest = 0
+            } else {
+                lastLobbyRequest++
+            }
+        }
+
+        var lastHeartbeat = 0
+        function heartbeat() {
+            if (lastHeartbeat > 120) {
+                console.log("Sending heartbeat...")
+                fetch(url + "/heartbeat", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({
+                        clientId: player.uuid,
+                        GameVersion: version,
+                    })
+                }).then((res) => {
+                    if (res.status == 200) {
+                        console.log("Heartbeat sent!")
+                    } else {
+                        console.log("Failed to send heartbeat")
+                        isConnected = false;
+                        isConnecting = false;
+                    }
+                })
+                lastHeartbeat = 0
+            } else {
+                lastHeartbeat++
+            }
+        }
+
+        setInterval(tick, 1000 / 60);
+    </script>
+</html>
